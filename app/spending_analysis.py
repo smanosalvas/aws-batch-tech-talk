@@ -5,6 +5,9 @@ import os
 S3_BUCKET_NAME =os.environ['S3_BUCKET_NAME'] 
 S3_FILE_KEY = os.environ['S3_FILE_KEY']
 
+# S3 Client
+s3 = boto3.client("s3", region_name=AWS_REGION)
+
 # Clean up amounts: removes the $ and converts to float
 def clean_amount(amount):
     return float(amount.replace('$', '').replace(',', ''))
