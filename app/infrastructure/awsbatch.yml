@@ -1,0 +1,271 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Simple AWS Batch deployment
+
+Resources:
+  # S3 Bucket for Data Storage
+  S3Bucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub '${AWS::StackName}-batch-data-bucket'
+
+  # VPC Configuration
+  VPC:
+    Type: 'AWS::EC2::VPC'
+    Properties:
+      CidrBlock: '10.0.0.0/16'
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-vpc'
+
+  # Subnet Configuration
+  PublicSubnet1:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.1.0/24'
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-subnet-1'
+
+  PublicSubnet2:
+    Type: 'AWS::EC2::Subnet'
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: '10.0.2.0/24'
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: !Select [ 1, !GetAZs '' ]
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-public-subnet-2'
+
+  # Internet Gateway
+  InternetGateway:
+    Type: 'AWS::EC2::InternetGateway'
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-igw'
+
+  AttachGateway:
+    Type: 'AWS::EC2::VPCGatewayAttachment'
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # Route Table and Route Configuration
+  RouteTable:
+    Type: 'AWS::EC2::RouteTable'
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-route-table'
+
+  Route:
+    Type: 'AWS::EC2::Route'
+    Properties:
+      RouteTableId: !Ref RouteTable
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref InternetGateway
+
+  SubnetRouteTableAssociation1:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref RouteTable
+
+  SubnetRouteTableAssociation2:
+    Type: 'AWS::EC2::SubnetRouteTableAssociation'
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref RouteTable
+
+  # Security Group for Batch Jobs
+  BatchSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      VpcId: !Ref VPC
+      GroupDescription: Security group for AWS Batch compute environment
+      SecurityGroupIngress:
+        - IpProtocol: '-1'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-batch-sg'
+
+  BatchInstanceRole:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: BatchInstanceProfile
+      Roles:
+        - !Ref BatchEC2InstanceRole
+
+  BatchEC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: BatchEC2InstanceRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  # AWS Batch Compute Environment
+  BatchComputeEnvironment:
+    Type: AWS::Batch::ComputeEnvironment
+    Properties:
+      ComputeEnvironmentName: 'analyzer-batch-compute-environment'
+      Type: MANAGED
+      ComputeResources:
+        Type: EC2
+        MinvCpus: 0
+        MaxvCpus: 16
+        InstanceTypes:
+          - optimal
+        InstanceRole: !Ref BatchInstanceRole
+        SecurityGroupIds:
+          - !Ref BatchSecurityGroup
+        Subnets:
+          - !Ref PublicSubnet1
+          - !Ref PublicSubnet2
+        SpotIamFleetRole: 'AWSServiceRoleForEC2SpotFleet'
+      ServiceRole: !GetAtt BatchServiceRole.Arn
+
+  # AWS Batch Service Role
+  BatchServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: 
+                - batch.amazonaws.com
+                - ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSBatchServiceRole
+      Policies:
+        - PolicyName: batchServiceRolePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - batch:Describe*
+                  - batch:List*
+                  - batch:TerminateJob
+                  - batch:UpdateJobQueue
+                  - batch:SubmitJob
+                  - ecs:List*
+                  - ecs:Describe*
+                  - ecs:DescribeClusters
+                  - ecs:CreateCluster
+                  - ecs:DeleteCluster
+                  - logs:Describe*
+                  - logs:Get*
+                  - logs:TestMetricFilter
+                  - logs:FilterLogEvents
+                  - iam:ListInstanceProfiles
+                  - iam:ListRoles
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeKeyPairs
+                  - ec2:DescribeVpcs
+                  - ec2:DescribeImages
+                  - ec2:DescribeLaunchTemplates
+                  - ec2:DescribeLaunchTemplateVersions
+                  - secretsmanager:GetSecretValue
+                  - ssm:GetParameters
+                Resource: "*"
+        - PolicyName: S3AccessPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:aws:s3:::${S3Bucket}
+                  - !Sub arn:aws:s3:::${S3Bucket}/*
+        - PolicyName: ECRReadOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ecr:DescribeRepositoryCreationTemplate
+                  - ecr:GetRegistryPolicy
+                  - ecr:DescribeImageScanFindings
+                  - ecr:GetLifecyclePolicyPreview
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:DescribeRegistry
+                  - ecr:DescribeImageReplicationStatus
+                  - ecr:GetAuthorizationToken
+                  - ecr:ListTagsForResource
+                  - ecr:BatchGetRepositoryScanningConfiguration
+                  - ecr:GetRegistryScanningConfiguration
+                  - ecr:ValidatePullThroughCacheRule
+                  - ecr:BatchGetImage
+                  - ecr:DescribeRepositories
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:GetRepositoryPolicy
+                  - ecr:GetLifecyclePolicy
+                Resource: "*"
+
+
+  # AWS Batch Job Queue
+  BatchJobQueue:
+    Type: AWS::Batch::JobQueue
+    Properties:
+      JobQueueName: 'analyzer-batch-job-queue'
+      State: ENABLED
+      Priority: 1
+      ComputeEnvironmentOrder:
+        - Order: 1
+          ComputeEnvironment: !Ref BatchComputeEnvironment
+
+  # AWS Batch Job Definition
+  BatchJobDefinition:
+    Type: AWS::Batch::JobDefinition
+    Properties:
+      JobDefinitionName: analyzer-batch-job-definition
+      Type: Container
+      ContainerProperties:
+        Image: 
+          Fn::Join:
+            - ""
+            - - Ref: AWS::AccountId
+              - ".dkr.ecr.us-east-1.amazonaws.com/spend_analyzer:latest"
+        ResourceRequirements:
+        - Type: MEMORY
+          Value: '8192'
+        - Type: VCPU
+          Value: '4'
+        ExecutionRoleArn: !GetAtt BatchServiceRole.Arn
+        JobRoleArn: !GetAtt BatchServiceRole.Arn
+
+Outputs:
+  S3BucketName:
+    Description: "S3 bucket name"
+    Value: !Ref S3Bucket
+
+  BatchJobQueueName:
+    Description: "AWS Batch job queue name"
+    Value: !Ref BatchJobQueue
+
+  BatchJobDefinitionName:
+    Description: "AWS Batch job definition name"
+    Value: !Ref BatchJobDefinition
