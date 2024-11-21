@@ -1,6 +1,7 @@
 import boto3
 import pandas as pd
 import os
+import io
 
 S3_BUCKET_NAME =os.environ['S3_BUCKET_NAME'] 
 S3_FILE_KEY = os.environ['S3_FILE_KEY']
