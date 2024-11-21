@@ -18,7 +18,7 @@ def read_file_from_s3(bucket_name, s3_key):
     try:
         response = s3.get_object(Bucket=bucket_name, Key=s3_key)
         print(f"File successfully read from S3: {s3_key}")
-        return pd.read_csv(io.BytesIO(response['Body'].read()))
+        return pd.read_csv(io.BytesIO(response['Body'].read()), iterator=True, chunksize=1000)
     except Exception as e:
         print(f"Error reading file from S3: {e}")
         exit(1)
