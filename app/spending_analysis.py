@@ -17,8 +17,7 @@ def clean_amount(amount):
 def read_file_from_s3(bucket_name, s3_key):
     try:
         response = s3.get_object(Bucket=bucket_name, Key=s3_key)
-        print(f"File successfully read from S3: {s3_key}")
-        return pd.read_csv(io.BytesIO(response['Body'].read()), iterator=True, chunksize=1000)
+        return pd.read_csv(io.BytesIO(response['Body'].read()),nrows=100000)
     except Exception as e:
         print(f"Error reading file from S3: {e}")
         exit(1)
@@ -68,8 +67,10 @@ def analyze_spending(dataframe):
 
 # Main function to run the analysis
 def main():
+    print("Initializing batch process")
     dataframe = read_file_from_s3(S3_BUCKET_NAME, S3_FILE_KEY)
-
+    print(f"File successfully read from S3: {S3_FILE_KEY}")
+    
     analyze_spending(dataframe)
 
 if __name__ == '__main__':
