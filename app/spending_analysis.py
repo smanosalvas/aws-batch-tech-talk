@@ -4,7 +4,7 @@ import os
 
 S3_BUCKET_NAME =os.environ['S3_BUCKET_NAME'] 
 S3_FILE_KEY = os.environ['S3_FILE_KEY']
-
+AWS_REGION = os.environ['AWS_REGION']
 # S3 Client
 s3 = boto3.client("s3", region_name=AWS_REGION)
 
