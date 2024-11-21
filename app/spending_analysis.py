@@ -37,13 +37,13 @@ def analyze_spending(dataframe):
         dataframe["amount"] = dataframe["amount"].apply(clean_amount)
 
         # Spending analysis by client
-        client_summary = df.groupby("client_id")["amount"].agg(["sum", "mean", "count"]).reset_index()
+        client_summary = dataframe.groupby("client_id")["amount"].agg(["sum", "mean", "count"]).reset_index()
         client_summary.columns = ["client_id", "total_spent", "average_transaction", "transaction_count"]
         print("\nClient-specific spending summary:")
         print(client_summary.head())
 
         # Spending analysis by Merchandising 
-        merchant_summary = df.groupby("merchant_id")["amount"].agg(["sum", "mean", "count"]).reset_index()
+        merchant_summary = dataframe.groupby("merchant_id")["amount"].agg(["sum", "mean", "count"]).reset_index()
         merchant_summary.columns = ["merchant_id", "total_spent", "average_transaction", "transaction_count"]
         print("\nMerchant-specific spending summary:")
         print(merchant_summary.head())
