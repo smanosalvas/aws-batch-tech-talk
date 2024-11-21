@@ -2,6 +2,9 @@ import boto3
 import pandas as pd
 import os
 
+S3_BUCKET_NAME =os.environ['S3_BUCKET_NAME'] 
+S3_FILE_KEY = os.environ['S3_FILE_KEY']
+
 # Clean up amounts: removes the $ and converts to float
 def clean_amount(amount):
     return float(amount.replace('$', '').replace(',', ''))
@@ -45,13 +48,13 @@ def analyze_spending(dataframe):
         client_summary.to_csv("client_summary.csv", index=False)
 
         # Upload the result file to S3
-        upload_file_to_s3("client_summary.csv", AWS_BUCKET_NAME, "client_summary.csv")
+        upload_file_to_s3("client_summary.csv", S3_BUCKET_NAME, "client_summary.csv")
 
         # Save the merchant summary locally
         merchant_summary.to_csv("merchant_summary.csv", index=False)
 
         # Upload the result file to S3
-        upload_file_to_s3("merchant_summary.csv", AWS_BUCKET_NAME, "merchant_summary.csv")
+        upload_file_to_s3("merchant_summary.csv", S3_BUCKET_NAME, "merchant_summary.csv")
 
     except Exception as e:
         print(f"Error analyzing spending: {e}")
@@ -61,11 +64,6 @@ def analyze_spending(dataframe):
 
 # Main function to run the analysis
 def main():
-
-    # download_file_from_s3()
-    S3_BUCKET_NAME =os.environ['S3_BUCKET_NAME'] 
-    S3_FILE_KEY = os.environ['S3_FILE_KEY']
-    
     dataframe = read_file_from_s3(S3_BUCKET_NAME, S3_FILE_KEY)
 
     analyze_spending(dataframe)
